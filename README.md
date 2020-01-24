@@ -2,7 +2,7 @@
 
 ## Overview
 
-Compares the differences in memory using a traditional memory check, which is to generate a checksum for each memory page (or an entire region) and then record it. After the checksums are generated they are compared with checksums that are consistently generated throughout the process's lifespan - at least that is a common implementation. However, this contrasts in the sense that it generates a checksum to record, but it also takes a snapshot of all the pages and records. 
+Compares the differences in memory using a traditional memory check, which is to generate a checksum for each memory page (or an entire region) and then record it. After the checksums are generated they are compared with checksums that are consistently generated throughout the process's lifespan - at least that is a common implementation. However, this contrasts in the sense that it generates a checksum to record, but it also takes a snapshot of all the pages and records and then parses the data into code to be used as macros. 
 
 ## Implementation
 
