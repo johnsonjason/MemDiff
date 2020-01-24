@@ -22,13 +22,12 @@
 	SOFTWARE.
 */
 
-#define _CRT_SECURE_NO_WARNINGS
 #include "pch.h"
 #include <iostream>
 #include <psapi.h>
 #include <vector>
 #include "error-checking.h"
-
+#include "macrowriter.h"
 //
 // Memory Differentiation Structure
 // Contains the memory page contents and the information about a page
@@ -171,13 +170,15 @@ DWORD GetModulePages(LPWSTR ModuleName, std::vector<MEM_DIFF>& DiffList)
 		//
 
 		VirtualQuery(reinterpret_cast<PVOID>(PageIter), &BasicInformation, sizeof(BasicInformation));
-		if (BasicInformation.Protect == PAGE_EXECUTE_READ || BasicInformation.Protect == PAGE_READONLY)
+		if ((size_t)BasicInformation.BaseAddress < (size_t)Module + ModuleInformation.SizeOfImage)
 		{
-			//
-			// Iterate over all of the data in the page, save it, and register their checksums
-			//
-
-			EstablishPage(DiffList, BasicInformation);
+			if (BasicInformation.Protect == PAGE_EXECUTE_READ || BasicInformation.Protect == PAGE_READONLY)
+			{
+				//
+				// Iterate over all of the data in the page, save it, and register their checksums
+				//
+				EstablishPage(DiffList, BasicInformation);
+			}
 		}
 
 	}
@@ -229,8 +230,8 @@ Routine Description:
 
 Parameters:
 
-	Page - The virtual address of the page resident in the module's memory, used in comparison and iteration
-	AltPage - the virtual address of the page's snapshot, used in comparing against Page
+	Page - the virtual address of the page's snapshot, used in comparing against Page
+	AltPage - The virtual address of the page resident in the module's memory, used in comparison and iteration
 	PageSize - The memory size of the pages to compare, indicates when to stop comparing
 
 Return Value:
@@ -238,13 +239,14 @@ Return Value:
 	std::vector<std::pair<BYTE, PVOID>> - A list of paired memory changes, along with the location (virtual address) of each change
 
 --*/
-std::vector<std::pair<BYTE, PVOID>> ComparePages(void* Page, void* AltPage, size_t PageSize)
+std::pair<std::vector<std::pair<BYTE, PVOID>>, std::vector<std::pair<BYTE, PVOID>>> ComparePages(void* Page, void* AltPage, size_t PageSize)
 {
 	//
 	// ChangedBytes stores a list of byte+address combinations where changes occurred
 	//
 
 	std::vector<std::pair<BYTE, PVOID>> ChangedBytes;
+	std::vector<std::pair<BYTE, PVOID>> OriginBytes;
 	size_t AltPageIter = reinterpret_cast<size_t>(AltPage);
 
 	for (size_t PageIter = reinterpret_cast<size_t>(Page); PageIter < (reinterpret_cast<size_t>(Page) + PageSize); PageIter++)
@@ -260,16 +262,16 @@ std::vector<std::pair<BYTE, PVOID>> ComparePages(void* Page, void* AltPage, size
 			//
 
 			ChangedBytes.push_back({ *(BYTE*)AltPageIter, (PVOID)AltPageIter });
+			OriginBytes.push_back({ *(BYTE*)PageIter, (PVOID)AltPageIter });
 		}
 		AltPageIter++;
 	}
 
 	for (std::pair<BYTE, PVOID> ChangePair : ChangedBytes)
 	{
-		std::cout << std::hex << "Change Address: " << ChangePair.second << " | Changed byte: 0x" << +ChangePair.first << "\n";
+		std::cout << std::hex << "Change Address: " << ChangePair.second << " | Changed byte: 0x" << +ChangePair.first << "\n\n";
 	}
-	
-	return ChangedBytes;
+	return { ChangedBytes, OriginBytes };
 }
 
 /*++
@@ -299,6 +301,8 @@ DWORD WINAPI EvaluatePageList(LPVOID lpParam)
 	bool PageEval = true;
 	std::vector<MEM_DIFF> PageSet;
 	GetModulePages(NULL, PageSet);
+	std::cout << "Page list initialized. " << std::endl;
+
 	while (PageEval)
 	{
 		for (MEM_DIFF Page : PageSet)
@@ -311,14 +315,29 @@ DWORD WINAPI EvaluatePageList(LPVOID lpParam)
 			if (Checksum)
 			{
 				std::cout << "Page change: " << Page.BasicInformation.BaseAddress << " | Changed Checksum: " << Checksum <<
-					" | Expected Checksum: " << Page.Checksum << std::endl;
+					" | Expected Checksum: " << Page.Checksum << "\n";
 
 				//
 				// Compare and extract the changed memory with their corresponding addresses indicating where the pages differ
 				//
 
-				ComparePages(Page.PageData.data(), Page.BasicInformation.BaseAddress, Page.BasicInformation.RegionSize);
-				getchar();
+				auto ChangedData = ComparePages(Page.PageData.data(), Page.BasicInformation.BaseAddress, Page.BasicInformation.RegionSize);
+
+				std::string MacroName = "";
+				std::cout << "Macro name? : ";
+				std::getline(std::cin, MacroName);
+
+				//
+				// Output the generated macro statement utilizing WriteProcessMemory
+				//
+
+				OutputMacro(GeneratePairMacro(MacroName, ChangedData.first));
+
+				//
+				// Output the inverse of the macro statement operation (undo)
+				//
+
+				OutputMacro(GeneratePairMacro("Undo" + MacroName, ChangedData.second));
 			}
 		}
 	}
@@ -331,7 +350,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
 	{
 	case DLL_PROCESS_ATTACH:
 		AllocConsole();
-		freopen("CONIN$", "w", stdout);
+		freopen("CONIN$", "r", stdin);
 		freopen("CONOUT$", "w", stdout);
 		freopen("CONOUT$", "w", stderr);
 		CloseHandle(CreateThread(0, 0, EvaluatePageList, 0, 0, 0));
