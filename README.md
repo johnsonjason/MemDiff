@@ -10,7 +10,7 @@ The implementation is that it scans only the checksums, when a checksum mismatch
 
 ![alt_text](https://i.imgur.com/LKUYCqd.png)
 
-In the above screenshot, it generates the code behind a game modification software without reverse engineering it. It does this by first pressing the button on that software to enable flying, which captures the changes. MemDiff then captures that change and reflects it in both a list and generated code. It builds the code that enabled and disabled flying. It generates macros "on the fly".
+In the above screenshot, it generates the code behind a game modification software without reverse engineering it. It does this by first pressing the button on that software to enable flying in the game. MemDiff then captures that change and reflects it in both a list and generated code. It builds the code that enabled and disabled flying. It generates macros "on the fly".
 
 ## TODO:
 
