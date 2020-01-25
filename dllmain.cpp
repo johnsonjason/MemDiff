@@ -300,7 +300,12 @@ DWORD WINAPI EvaluatePageList(LPVOID lpParam)
 
 	bool PageEval = true;
 	std::vector<MEM_DIFF> PageSet;
-	GetModulePages(NULL, PageSet);
+	std::wstring ModuleName;
+
+	std::cout << "Module name: ";
+	std::getline(std::wcin, ModuleName);
+	GetModulePages(const_cast<LPWSTR>(ModuleName.c_str()), PageSet);
+
 	std::cout << "Page list initialized. " << std::endl;
 
 	while (PageEval)
